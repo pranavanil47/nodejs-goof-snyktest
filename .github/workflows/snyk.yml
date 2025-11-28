@@ -1,10 +1,9 @@
-name: Snyk Universal Scan (clone, no checkout)
+name: Snyk Universal Scan (clone, auth in-run)
 
 on:
   push:
     branches: ["main","master"]
   pull_request:
-    branches: ["main","master"]
 
 permissions:
   contents: read
@@ -12,6 +11,8 @@ permissions:
 jobs:
   snyk-scan:
     runs-on: ubuntu-latest
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
     steps:
       - name: Prepare workspace
@@ -22,102 +23,26 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git clone --depth 1 https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }} repo-src
-          echo "Cloned repo — listing root:"
-          ls -la repo-src
-
-      - name: Remove .github folder if exists (exclude from scan)
-        run: |
-          if [ -d "repo-src/.github" ]; then
-            rm -rf repo-src/.github
-            echo ".github removed."
-          else
-            echo "No .github folder."
-          fi
-
-      - name: Setup environment — Node (for Snyk CLI)
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
+          rm -rf repo-src/.github || true
 
       - name: Install Snyk CLI
         run: npm install -g snyk@latest
 
-      # ----------------------------
-      # Optionally install dependencies (uncomment per project type)
-      # ----------------------------
-      #- name: Install Node dependencies
-      #  working-directory: repo-src
-      #  run: |
-      #    if [ -f "package.json" ]; then
-      #      npm install
-      #    fi
-      #
-      #- name: Install Python dependencies
-      #  working-directory: repo-src
-      #  run: |
-      #    if [ -f "requirements.txt" ]; then
-      #      pip3 install -r requirements.txt
-      #    fi
-      #
-      #- name: Install Java/Maven build (if pom.xml exists)
-      #  working-directory: repo-src
-      #  run: |
-      #    if [ -f "pom.xml" ]; then
-      #      mvn install -q
-      #    fi
+      - name: Authenticate Snyk CLI
+        run: snyk auth $SNYK_TOKEN
 
-      # ----------------------------
-      # Snyk SCA / Dependency scan
-      # ----------------------------
-      - name: Snyk SCA scan (dependencies)
-        working-directory: repo-src
-        run: snyk test || true
-
-      # ----------------------------
-      # Snyk Code SAST scan → produce SARIF
-      # ----------------------------
-      - name: Snyk Code scan → SARIF
-        working-directory: repo-src
-        run: snyk code test --sarif > "$GITHUB_WORKSPACE/snyk-code.sarif" || true
-
-      # ----------------------------
-      # Snyk IaC test (if any IaC files present)
-      # ----------------------------
-      - name: Snyk IaC test (local)
-        working-directory: repo-src
-        run: snyk iac test || true
-
-      # ----------------------------
-      # Snyk Container scan if Dockerfile present
-      # ----------------------------
-      - name: Build Docker image if Dockerfile present
+      - name: Run Snyk SCA / Code / IaC / Container (if relevant)
         working-directory: repo-src
         run: |
-          if [ -f "Dockerfile" ]; then
-            docker build -t snyk-universal-image . || true
-            echo "Built container image snyk-universal-image"
-            echo "SCANNING container..."
-            snyk container test snyk-universal-image --file=Dockerfile || true
-          else
-            echo "No Dockerfile — skipping container scan."
+          snyk test || true
+          snyk code test --sarif > "$GITHUB_WORKSPACE/snyk-code.sarif" || true
+          snyk iac test || true
+          if [ -f Dockerfile ]; then
+            docker build -t snyk-image . || true
+            snyk container test snyk-image --file=Dockerfile || true
           fi
 
-      # ----------------------------
-      # Upload SARIF for Snyk Code (if generated) to GitHub Code Scanning
-      # ----------------------------
-      - name: Upload SARIF to GitHub Code Scanning
-        if: ${{ always() }}
+      - name: Upload SARIF (if generated)
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: snyk-code.sarif
-
-      # (Optional) Upload Snyk SCA/IaC/Container reports as artifacts
-      - name: Upload Snyk scan results as artifacts
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: snyk-scan-reports
-          path: |
-            snyk-code.sarif
-            snyk-report.json
-            # Add other report files you generate
