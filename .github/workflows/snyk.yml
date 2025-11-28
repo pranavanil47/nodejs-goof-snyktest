@@ -41,8 +41,10 @@ jobs:
             docker build -t snyk-image . || true
             snyk container test snyk-image --file=Dockerfile || true
           fi
+          snyk monitor
 
       - name: Upload SARIF (if generated)
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: snyk-code.sarif
+          
