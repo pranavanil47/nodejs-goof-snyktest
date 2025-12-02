@@ -43,8 +43,10 @@ jobs:
           fi
           snyk monitor
 
-      - name: Upload SARIF (if generated)
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: snyk-code.sarif
-          
+      - name: Move SARIF to .github/findings/
+        if: always()
+        run: |
+          mkdir -p .github/findings
+          if [ -f snyk-code.sarif ]; then
+            mv snyk-code.sarif .github/findings/
+          fi
