@@ -5,7 +5,7 @@ A vulnerable Node.js demo application, based on the [Dreamer s Lab tutorial](htt
 
 ## Features
 
-This vulnerable  app includes the follow ing capabilities to experiment with:
+This vulnerable  app includes the follow i ng capabilities to experiment with:
 * [Exploitable packages](#exploiting-the-vulnerabilities) with known vulnerabilities
 * [Docker Image Scanning](#docker-image-scanning) for base images with known vulnerabilities in system libraries
 * [Runtime alerts](#runtime-alerts) for detecting an invocation of vulnerable functions in open source dependencies
